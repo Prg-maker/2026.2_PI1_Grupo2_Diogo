@@ -4,6 +4,7 @@
 #include "motors.h"
 #include "imu.h"
 #include "lasers.h"
+#include "power.h"
 #include "ota_manager.h"
 
 unsigned long tempoAnterior = 0;
@@ -17,6 +18,7 @@ void setup() {
   initMotors();
   initIMU();
   initLasers();
+  initPower();
   initOTA();
 
   Serial.println("\n--- Robô Inicializado com Sucesso ---");
@@ -42,10 +44,13 @@ void loop() {
     int dEsq = -1, dFte = -1, dDir = -1;
     readLasers(dEsq, dFte, dDir);
 
+    updatePower();
+
     // Telemetria no Serial
     Serial.printf("[MOTORES] A: %5.2f RPS | B: %5.2f RPS\n", rpsA, rpsB);
     Serial.printf("[IMU]     Yaw: %6.1f deg | Taxa: %5.2f deg/s\n", getYawAngle(), getYawRate());
     Serial.printf("[LASER]   Esq: %4d mm | Frente: %4d mm | Dir: %4d mm\n", dEsq, dFte, dDir);
+    Serial.printf("[ENERGIA] %5.2f V | %7.1f mA | %7.1f mW\n", obter_tensao_bateria(), obter_corrente_mA(), obter_potencia_mW());
     Serial.println("--------------------------------------------------");
   }
 }

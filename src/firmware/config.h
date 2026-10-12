@@ -25,5 +25,8 @@
 #define ADDR_LASER_FTE 0x31
 #define ADDR_LASER_DIR 0x32
 
+// Sensor de energia INA219 (U12)
+#define INA219_ADDR 0x40
+
 // Constantes mecânicas
 #define PULSOS_POR_VOLTA 210.0f
