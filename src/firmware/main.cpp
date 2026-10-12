@@ -5,6 +5,7 @@
 #include "imu.h"
 #include "lasers.h"
 #include "power.h"
+#include "i2c_check.h"
 #include "ota_manager.h"
 
 unsigned long tempoAnterior = 0;
@@ -19,6 +20,7 @@ void setup() {
   initIMU();
   initLasers();
   initPower();
+  verificarI2C();
   initOTA();
 
   Serial.println("\n--- Robô Inicializado com Sucesso ---");

@@ -25,6 +25,9 @@
 #define ADDR_LASER_FTE 0x31
 #define ADDR_LASER_DIR 0x32
 
+// Endereço I2C da IMU MPU-6050
+#define ADDR_IMU 0x68
+
 // Sensor de energia INA219 (U12)
 #define INA219_ADDR 0x40
 
