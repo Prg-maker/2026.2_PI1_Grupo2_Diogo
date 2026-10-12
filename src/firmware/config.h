@@ -28,5 +28,13 @@
 // Sensor de energia INA219 (U12)
 #define INA219_ADDR 0x40
 
+// Limites da bateria LiPo 2S
+#define BAT_CELULAS              2
+#define BAT_V_ALERTA             7.0f
+#define BAT_V_CORTE              6.6f
+#define BAT_TEMPO_CONFIRMACAO_MS 2000
+#define I_SOBRECORRENTE_MA       2000.0f
+#define I_SOBRECORRENTE_TEMPO_MS 500
+
 // Constantes mecânicas
 #define PULSOS_POR_VOLTA 210.0f

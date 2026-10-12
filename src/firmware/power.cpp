@@ -2,11 +2,17 @@
 #include <Wire.h>
 #include <Adafruit_INA219.h>
 #include "power.h"
+#include "power_logic.h"
 #include "config.h"
 
 static Adafruit_INA219 ina219(INA219_ADDR);
 static bool ativo = false;
 static bool temLeitura = false;
+
+static MonitorBateria monitor({BAT_V_ALERTA, BAT_V_CORTE, BAT_TEMPO_CONFIRMACAO_MS,
+                               I_SOBRECORRENTE_MA, I_SOBRECORRENTE_TEMPO_MS});
+static EstadoBateria estadoAvisado = BATERIA_NORMAL;
+static bool sobrecorrenteAvisada = false;
 
 // inicializando com -1 para indicar que eh leitura invalida
 static float tensaoV = -1.0f;
@@ -50,8 +56,34 @@ void updatePower() {
   correnteMA = filtrar(correnteMA, i);
   potenciaMW = filtrar(potenciaMW, p);
   temLeitura = true;
+
+  monitor.atualizar(tensaoV, correnteMA, millis());
+
+  // Avisa só na mudança de estado
+  if (monitor.estado() != estadoAvisado) {
+    estadoAvisado = monitor.estado();
+    if (estadoAvisado == BATERIA_BAIXA) {
+      Serial.printf("[ENERGIA] Bateria baixa: %.2f V\n", tensaoV);
+    } else if (estadoAvisado == BATERIA_CRITICA) {
+      Serial.printf("[ENERGIA] Bateria critica: %.2f V, corte acionado\n", tensaoV);
+    }
+  }
+  if (monitor.sobrecorrente() != sobrecorrenteAvisada) {
+    sobrecorrenteAvisada = monitor.sobrecorrente();
+    if (sobrecorrenteAvisada) {
+      Serial.printf("[ENERGIA] Sobrecorrente: %.0f mA\n", correnteMA);
+    }
+  }
 }
 
 float obter_tensao_bateria() { return tensaoV; }
 float obter_corrente_mA() { return correnteMA; }
 float obter_potencia_mW() { return potenciaMW; }
+
+float obter_bateria_pct() {
+  if (!temLeitura) return -1.0f;
+  return bateriaPercentual(tensaoV, BAT_CELULAS);
+}
+
+bool bateriaCritica() { return monitor.estado() == BATERIA_CRITICA; }
+bool sobrecorrente() { return monitor.sobrecorrente(); }
