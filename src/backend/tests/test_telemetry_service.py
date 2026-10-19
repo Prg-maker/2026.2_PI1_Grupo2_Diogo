@@ -152,3 +152,40 @@ def test_burst_keeps_most_recent_data():
     assert result is not None
     assert result.position.row == 3
     assert result.position.col == 3
+
+
+def test_esp_connection_is_false_before_first_packet():
+    service = TelemetryService()
+
+    assert service.get_connection_status() == {
+        "connected": False,
+        "last_seen": None,
+        "age_ms": None,
+    }
+
+
+def test_recent_esp_packet_reports_connected():
+    service = TelemetryService()
+    service.mark_esp_packet_received()
+
+    status = service.get_connection_status()
+
+    assert status["connected"] is True
+    assert status["last_seen"] is not None
+    assert status["age_ms"] >= 0
+
+
+def test_esp_reported_disconnected_is_respected():
+    service = TelemetryService()
+    service.mark_esp_packet_received(connected=False)
+
+    assert service.get_connection_status()["connected"] is False
+
+
+def test_old_esp_packet_reports_disconnected(monkeypatch):
+    service = TelemetryService()
+    monkeypatch.setattr(settings, "ESP_CONNECTION_TIMEOUT_MS", 1000)
+    service._last_esp_received_at = datetime.now(timezone.utc) - timedelta(seconds=2)
+    service._esp_reports_connected = True
+
+    assert service.get_connection_status()["connected"] is False

@@ -17,12 +17,13 @@ with engine.begin() as conn:
     execucao_id = conn.execute(
         text(
             "INSERT INTO execucao (labirinto_id, iniciada_em, finalizada_em, tempo_total_ms,"
-            "status, resultado, velocidade_media_cm_s, criado_em, quantidade_celulas_visitadas)"
+            "status, algoritmo, resultado, velocidade_media_cm_s, criado_em, quantidade_celulas_visitadas)"
             "VALUES (:labirinto_id, :iniciada_em, :finalizada_em, :tempo_total_ms,"
-            ":status, :resultado, :velocidade_media_cm_s, :criado_em, :quantidade_celulas_visitadas) RETURNING id"
+            ":status, :algoritmo, :resultado, :velocidade_media_cm_s, :criado_em, :quantidade_celulas_visitadas) RETURNING id"
         ),
         execucao.model_dump(exclude={"id", "algorithm"}) | {
             "labirinto_id": labirinto_id,
+            "algoritmo": execucao.algorithm,
             "quantidade_celulas_visitadas": len({(p.row, p.col) for p in trajetoria}),
         },
     ).scalar_one()
@@ -46,28 +47,43 @@ with engine.begin() as conn:
         {
             "execucao_id": execucao_id,
             "tempo_relativo_ms": i * passo_ms,
-            "status_conexao": "conectado",
             "nivel_bateria_pct": metricas.battery_pct,
             "consumo_eletrico_ma": 866.0,
             "velocidade_instantanea_cm_s": metricas.speed_cm_s,
             "rpm_motor_esq": int(metricas.rpm),
             "rpm_motor_dir": int(metricas.rpm),
+        }for i, ponto in enumerate(trajetoria)
+    ]
+    conn.execute(
+        text(
+            "INSERT INTO amostra_telemetria (execucao_id, tempo_relativo_ms,"
+            "nivel_bateria_pct, consumo_eletrico_ma, velocidade_instantanea_cm_s, "
+            "rpm_motor_esq, rpm_motor_dir)"
+            "VALUES (:execucao_id, :tempo_relativo_ms,"
+            ":nivel_bateria_pct, :consumo_eletrico_ma, :velocidade_instantanea_cm_s,"
+            ":rpm_motor_esq, :rpm_motor_dir)"
+        ),
+        amostras,
+    )
+    movimentos = [
+        {
+            "execucao_id": execucao_id,
+            "tempo_relativo_ms": i * passo_ms,
             "giro_x_deg_s": 0.0,
             "giro_y_deg_s": 0.0,
             "giro_z_deg_s": 0.0,
             "pos_x": ponto.col,
             "pos_y": ponto.row,
-        }for i, ponto in enumerate(trajetoria)
+        }
+        for i, ponto in enumerate(trajetoria)
     ]
     conn.execute(
         text(
-            "INSERT INTO amostra_telemetria (execucao_id, tempo_relativo_ms, status_conexao,"
-            "nivel_bateria_pct, consumo_eletrico_ma, velocidade_instantanea_cm_s, "
-            "rpm_motor_esq, rpm_motor_dir, giro_x_deg_s, giro_y_deg_s, giro_z_deg_s, pos_x, pos_y)"
-            "VALUES (:execucao_id, :tempo_relativo_ms, :status_conexao,"
-            ":nivel_bateria_pct, :consumo_eletrico_ma, :velocidade_instantanea_cm_s,"
-            ":rpm_motor_esq, :rpm_motor_dir, :giro_x_deg_s, :giro_y_deg_s, :giro_z_deg_s, :pos_x, :pos_y)"
+            "INSERT INTO amostra_movimento (execucao_id, tempo_relativo_ms, "
+            "giro_x_deg_s, giro_y_deg_s, giro_z_deg_s, pos_x, pos_y) "
+            "VALUES (:execucao_id, :tempo_relativo_ms, :giro_x_deg_s, "
+            ":giro_y_deg_s, :giro_z_deg_s, :pos_x, :pos_y)"
         ),
-        amostras,
+        movimentos,
     )
 print(f"Seed gravado: execução {execucao_id}, {len(amostras)} amostras, {len(paredes)} paredes.")

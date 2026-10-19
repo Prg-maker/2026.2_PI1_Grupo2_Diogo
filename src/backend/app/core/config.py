@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     
     TELEMETRY_UPDATE_INTERVAL_MS: int = 1000
     TELEMETRY_LATENCY_TOLERANCE_MS: int = 250
+    TELEMETRY_HEARTBEAT_INTERVAL_MS: int = 5000
+    ESP_CONNECTION_TIMEOUT_MS: int = 5000
 
     model_config = SettingsConfigDict(
         env_file=".env",
