@@ -1,8 +1,8 @@
 # API da tela Labirinto
 
-API REST em [FastAPI](https://fastapi.tiangolo.com/) que entrega os dados da tela **Labirinto** do frontend: a execução (corrida) ativa, o labirinto, a trajetória do robô, as métricas e o log de eventos.
+API REST em [FastAPI](https://fastapi.tiangolo.com/) para as telas do Micromouse. Execuções e amostras de telemetria são gravadas no PostgreSQL; os dados de labirinto, trajetória e eventos das rotas antigas ainda usam o mock em memória.
 
-Por enquanto os dados são **simulados (mock)** e ficam na memória do servidor. Ainda não há integração com o robô nem com o banco de dados. O formato das respostas já é o definitivo, para o frontend não precisar mudar quando os dados reais chegarem (issue #111).
+O botão **Iniciar** cria uma execução no banco. A ESP envia amostras para `/api/telemetry`; cada amostra é associada à execução ativa. O botão de interromper fecha a execução.
 
 ## Como funciona
 
@@ -15,9 +15,10 @@ navegador ──► frontend (:5173) ──proxy /api──► backend (:8000)
                                                             montados quando o servidor liga
 ```
 
-1. Ao ligar, o backend monta uma execução de exemplo (`0847`, algoritmo Flood Fill) num labirinto 4×4 fixo. É o *seed*.
-2. Cada rota lê esse estado e devolve JSON. Os modelos de `app/models` garantem o formato.
-3. O frontend pergunta a cada 1 s (*polling*) e redesenha a tela.
+1. O front chama `POST /api/sessions` ao iniciar e recebe o id da execução criada.
+2. A ESP envia as métricas e a posição por `POST /api/telemetry`.
+3. O backend grava as métricas em `amostra_telemetria` e posição/giroscópio em `amostra_movimento`.
+4. Ao interromper, o front chama `POST /api/sessions/{id}/finish`.
 
 ## Estrutura
 
@@ -39,11 +40,17 @@ Os caminhos das rotas continuam com `sessions`, mas o que elas devolvem segue o 
 
 | Rota | Devolve | Se a execução não existir |
 |---|---|---|
-| `GET /api/sessions/active` | A execução ativa, ou `null` se não houver. Os campos são `id`, `labirinto_id`, `status`, `algorithm`, `tempo_total_ms`, `iniciada_em`, `finalizada_em`, `resultado`, `velocidade_media_cm_s` e `criado_em`. | — |
+| `GET /api/sessions/active` | A execução ativa salva no banco, ou `null`. | — |
+| `GET /api/sessions/{id}/telemetry` | Amostras persistidas da execução, incluindo métricas, posição e giroscópio. Aceita `limit` (padrão 100, máximo 1000) e `offset` para paginação. | `404` se a execução não existir. |
+| `POST /api/sessions` | Cria uma execução; recebe `{"tipo":"4x4"}` (também `8x4` ou `12x4`). Responde `201` com o id. | `409` se outra execução estiver ativa. |
+| `POST /api/sessions/{id}/finish` | Finaliza/interrompe a execução ativa. Recebe `{"status":"interrompido"}` ou `{"status":"concluido","resultado":"sucesso"}`. | `404` |
 | `GET /api/sessions/{id}/maze` | O labirinto: `size`, `grid[row][col]` com as paredes de cada célula (`parede_norte`, `parede_sul`, `parede_leste`, `parede_oeste`), `start` e `goal`. | 404 |
 | `GET /api/sessions/{id}/path` | A trajetória: lista de `{row, col}`, do início até a posição atual. | 404 |
 | `GET /api/sessions/{id}/metrics` | As métricas atuais: `speed_cm_s`, `rpm` e `battery_pct`. | 404 |
 | `GET /api/sessions/{id}/events` | O log de eventos: `timestamp`, `type` e `message`. | 404 |
+| `POST /api/telemetry` | Salva quando os valores mudam ou a cada 5 s; a resposta informa `saved` ou `unchanged` e inclui `execucao_id`. | `409` se não houver execução ativa. |
+| `GET /api/telemetry/status` | Informa se a ESP enviou um pacote recentemente, com `connected`, `last_seen` e `age_ms`. O status expira após `ESP_CONNECTION_TIMEOUT_MS` (5 s por padrão). | — |
+| `GET /api/telemetry/current` | Busca no banco a última amostra salva, priorizando uma execução ativa; devolve métricas, posição, horário relativo e estado recente da conexão. | `503` se ainda não houver amostras salvas. |
 
 O campo `status` vale `em_execucao`, `concluido` ou `interrompido`, como na documentação do projeto. O tempo (`tempo_total_ms`) é em **milissegundos**.
 
@@ -131,16 +138,20 @@ Use `python -m pytest`, e não só `pytest`. O `-m` coloca a pasta atual no cami
 ## Pendências conhecidas
 
 - **Labirintos retangulares (8×4 e 12×4):** o modelo `Maze` guarda um número só (`size`), então só representa labirintos quadrados. Para 8×4 e 12×4, ele vai precisar de linhas e colunas separadas. Quando isso mudar, o front também precisa mudar, em `src/api.ts` (tipo `ApiMaze`) e em `src/hooks/useLabirinto.ts` (`linhas` e `colunas`).
-- **Banco de dados (PostgreSQL):** é a próxima etapa. Hoje os dados somem quando o servidor reinicia.
+- **Rotas do labirinto:** labirinto, trajetória, métricas e eventos ainda usam o mock em memória.
 - **`requirements.txt`:** ainda não existe.
 
 ## Telemetria em tempo real — RNF01
 
-A API disponibiliza o estado mais recente da telemetria do Micromouse através do endpoint:
+A API disponibiliza a última amostra persistida da telemetria através do endpoint:
 
 ```http
 GET /api/telemetry/current
 ```
+
+O front pode consultar essa rota periodicamente para atualizar os valores. A resposta inclui `execucao_id`, `telemetry_sample_id`, `metrics`, `position`, `connected` e `stale`. Se a execução estiver ativa, a rota prioriza as amostras dela; caso contrário, devolve a amostra mais recente disponível.
+
+Para persistir os dados enviados pela ESP, use `POST /api/telemetry`. Esse endpoint recebe o JSON aninhado com `position` e `metrics`, grava bateria/velocidade/RPM em `amostra_telemetria` e posição/giroscópio em `amostra_movimento`. Campos de giroscópio e consumo não enviados pela ESP são gravados como zero. Leituras sem mudança são ignoradas, com uma amostra de segurança a cada 5 segundos; alterações de bateria, velocidade, RPM ou posição são gravadas imediatamente. A interface pode consultar `GET /api/telemetry/status` para obter o estado da conexão: o backend considera a ESP conectada por 5 segundos após o último pacote recebido.
 
 ### Intervalo de atualização
 

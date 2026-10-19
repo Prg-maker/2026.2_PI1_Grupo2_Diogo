@@ -12,7 +12,7 @@ try:
     socket.create_connection((settings.POSTGRES_HOST, settings.POSTGRES_PORT), timeout=1).close()
 except OSError:
     pytest.skip(
-        f"banco fora do ar na porta {settings.POSTGRES_PORT}: rode docker compose up -d db",
+        f"banco fora do ar na porta {settings.POSTGRES_PORT}: rode docker compose up -d backend",
         allow_module_level=True,
     )
 
