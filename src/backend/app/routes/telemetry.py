@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.schemas.telemetry import EspTelemetryInput, TelemetryData
 from app.services.telemetry_service import telemetry_service
 
@@ -12,6 +13,8 @@ router = APIRouter(
     prefix="/telemetry",
     tags=["Telemetry"],
 )
+websocket_router = APIRouter(tags=["Telemetry"])
+telemetry_input_adapter = TypeAdapter(TelemetryData | EspTelemetryInput)
 
 
 @router.get("/status")
@@ -82,6 +85,10 @@ def receive_telemetry(
     db: Session = Depends(get_db),
 ):
     """Recebe uma amostra da ESP e salva na execução ativa."""
+    return _save_telemetry(telemetry, db)
+
+
+def _save_telemetry(telemetry: EspTelemetryInput | TelemetryData, db: Session):
     reported_connected = (
         telemetry.connected if isinstance(telemetry, EspTelemetryInput) else True
     )
@@ -199,3 +206,40 @@ def receive_telemetry(
         "telemetry_sample_id": inserted_id,
         "movement_sample_id": movement_id,
     }
+
+
+@websocket_router.websocket("/ws/telemetry")
+async def receive_telemetry_websocket(websocket: WebSocket):
+    """Recebe amostras JSON da ESP por uma conexão WebSocket persistente."""
+    await websocket.accept()
+    telemetry_service.mark_websocket_connected()
+    try:
+        while True:
+            try:
+                payload = await websocket.receive_json()
+                telemetry = telemetry_input_adapter.validate_python(payload)
+            except (ValidationError, ValueError, TypeError) as error:
+                await websocket.send_json({"status": "error", "detail": str(error)})
+                continue
+
+            db = SessionLocal()
+            try:
+                result = _save_telemetry(telemetry, db)
+                await websocket.send_json(result)
+            except HTTPException as error:
+                db.rollback()
+                await websocket.send_json(
+                    {"status": "error", "detail": error.detail, "code": error.status_code}
+                )
+            except Exception:
+                db.rollback()
+                await websocket.send_json(
+                    {"status": "error", "detail": "Falha ao salvar telemetria."}
+                )
+                raise
+            finally:
+                db.close()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        telemetry_service.mark_websocket_disconnected()
