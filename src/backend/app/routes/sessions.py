@@ -19,7 +19,7 @@ def check_active_session(session_id: str) -> None: #da o 404 se nao existir
         raise HTTPException(status_code=404, detail="No active session found")
 
 
-@router.get("/sessions/active")
+@router.get("/sessions/active", response_model=Execution | None)
 def get_active_session(db: Session = Depends(get_db)):
     execution = db.execute(
         text(
