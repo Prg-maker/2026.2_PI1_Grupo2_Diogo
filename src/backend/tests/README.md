@@ -154,6 +154,7 @@ telemetria, além dos testes do seed:
 ./venv/bin/python -m pytest -q \
   tests/test_telemetry_routes.py \
   tests/test_telemetry_service.py \
+  test/test_history.py \
   tests/test_seed.py
 
 ./venv/bin/python -m pytest -q tests/test_execution_data.py -k session_telemetry
