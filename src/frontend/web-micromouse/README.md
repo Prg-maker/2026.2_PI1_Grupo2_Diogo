@@ -202,3 +202,30 @@ Para conferir só o caminho até a API, abra http://localhost:5173/api/sessions/
 ### Mudei o `docker-compose.yml` e nada mudou
 
 - O `docker compose restart` não lê variáveis novas. Use `docker compose up -d`, que recria o container com a configuração nova.
+
+## Testes unitários do SVG
+
+A suíte usa React Testing Library, Vitest 4 e jsdom. O Vitest 4 é compatível com o Node 20 usado pelo container. Os testes renderizam `Percurso` com posições conhecidas e verificam o SVG e os controles; a execução é independente do backend e do banco.
+
+Na pasta `src/frontend/web-micromouse`, instale as dependências e execute:
+
+```powershell
+npm ci
+npm run test:unit
+npm run test:coverage
+```
+
+Com o frontend já iniciado pelo Compose desta pasta, os mesmos comandos podem ser executados no container:
+
+```powershell
+docker compose exec app npm run test:unit
+docker compose exec app npm run test:coverage
+```
+
+Os casos estão em `src/components/Percurso.test.tsx` e cobrem dimensões 4×4, 8×4 e 12×4, centros das células, posição e direção do robô, trajetórias vazias ou com uma posição, reprodução, pausa, retomada, seleção de passo, fim do replay, atualização do percurso e limpeza dos temporizadores. O relógio é simulado nos testes do replay para avançar os passos de 400 ms sem esperas reais.
+
+O relatório mede o arquivo inteiro `src/components/Percurso.tsx`, incluindo os marcadores e os controles. O comando de cobertura exige pelo menos 80% de linhas, instruções, funções e ramificações desse componente. Abra `coverage/index.html` para consultar o relatório HTML; a pasta gerada está no `.gitignore`.
+
+Para a PR, capture o terminal com o comando e o resultado e o resumo do relatório HTML. Declare que o percentual corresponde a `Percurso.tsx`.
+
+As paredes detectadas ainda aguardam implementação no componente. O caso correspondente está registrado como `todo`; a integração entre banco, API e paredes no SVG também permanece pendente.
