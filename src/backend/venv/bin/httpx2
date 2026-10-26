@@ -1,4 +1,4 @@
-#!/home/daniel/daniel/pi1/2026.2_PI1_Grupo2_Diogo/src/backend/venv/bin/python3
+#!/home/daniel/daniel/pi1/2026.2_PI1_Grupo2_Diogo/src/backend/venv/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

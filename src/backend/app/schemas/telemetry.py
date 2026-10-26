@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 
 class PositionData(BaseModel):
@@ -10,8 +10,24 @@ class PositionData(BaseModel):
 
 class MetricsData(BaseModel):
     speed_cm_s: float = Field(ge=0)
-    rpm: float = Field(ge=0)
+    rpm: float | None = Field(default=None, ge=0)
+    rpm_left: float | None = Field(
+        default=None, ge=0, validation_alias=AliasChoices("rpmLeft", "rpm_left")
+    )
+    rpm_right: float | None = Field(
+        default=None, ge=0, validation_alias=AliasChoices("rpmRight", "rpm_right")
+    )
     battery_pct: float = Field(ge=0, le=100)
+
+    @model_validator(mode="after")
+    def fill_average_rpm(self):
+        if self.rpm is None:
+            if self.rpm_left is None or self.rpm_right is None:
+                raise ValueError(
+                    "Informe metrics.rpm ou os dois campos metrics.rpmLeft e metrics.rpmRight."
+                )
+            self.rpm = (self.rpm_left + self.rpm_right) / 2
+        return self
 
 
 class TelemetryEventData(BaseModel):
