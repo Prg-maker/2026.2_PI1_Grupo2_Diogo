@@ -174,12 +174,12 @@ export function TelemetryPage() {
     }
     // # verificiar se chegou no destino final
     // falha  sucesso
-    let status = "interrompido";
+    let status = "concluido";
     // em_execucao, concluido, interrompido
-    let resultado = "falha";
+    let resultado = "sucesso";
 
     try {
-      const { data } = await api.post(
+      await api.post(
         `/api/sessions/${dataExec?.execucao_id ?? dataExec?.id}/finish`,
         {
           status: status,

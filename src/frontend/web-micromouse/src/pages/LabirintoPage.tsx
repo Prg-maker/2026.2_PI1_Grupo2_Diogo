@@ -11,7 +11,6 @@ export function LabirintoPage() {
   const { telemetria, trajetoria } = useLabirinto()
   const{linhas, colunas} = telemetria?.labirinto ?? LABIRINTOS[tipo]
 
-  const status = telemetria?.status ?? 'Sem conexão'
 
   return (
     <main className="flex-1 overflow-y-auto px-4 pb-4 pt-[136px] text-slate-200 sm:p-12">
@@ -27,10 +26,7 @@ export function LabirintoPage() {
         <section className="rounded-xl border border-white/5 bg-card p-4">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-slate-100">Labirinto Atual</h2>
-            <div className="flex items-center gap-3">
-              <SeletorLabirinto valor={tipo} onChange={setTipo} />
-              <Status texto={status} />
-            </div>
+      
           </div>
           <Percurso key={tipo} linhas={linhas} colunas={colunas} trajetoria={trajetoria} />
         </section>
