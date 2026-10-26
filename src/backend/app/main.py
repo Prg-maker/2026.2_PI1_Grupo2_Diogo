@@ -3,7 +3,6 @@ from app.core.config import settings
 from app.core.database import test_database_connection
 from app.routes import sessions, telemetry
 from fastapi.middleware.cors import CORSMiddleware
-import os
 
 
 app = FastAPI(
@@ -14,9 +13,6 @@ app = FastAPI(
 app.include_router(sessions.router, prefix="/api")
 app.include_router(telemetry.router, prefix="/api")
 app.include_router(telemetry.websocket_router)
-
-origens = os.getenv("CORS_ORIGINS", "*").split(",")
-
 
 app.add_middleware(
     CORSMiddleware,
