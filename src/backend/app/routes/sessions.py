@@ -9,7 +9,8 @@ from app.models import PathPoint
 from app.models import Metrics
 from app.models import Event
 from app.models import Maze
-from app.schemas.sessions import FinishExecutionInput, StartExecutionInput
+from app.schemas.sessions import FinishExecutionInput, StartExecutionInput, HistoryItem, HistoryResponse
+from typing import Literal
 
 router = APIRouter(tags=["sessions"])
 SESSION_NOT_FOUND = {"description": "No active session found"} #usar pra avisar o 404
@@ -19,7 +20,7 @@ def check_active_session(session_id: str) -> None: #da o 404 se nao existir
         raise HTTPException(status_code=404, detail="No active session found")
 
 
-@router.get("/sessions/active")
+@router.get("/sessions/active", response_model=Execution | None)
 def get_active_session(db: Session = Depends(get_db)):
     execution = db.execute(
         text(
@@ -80,6 +81,92 @@ def start_execution(
         "iniciada_em": execution["iniciada_em"],
         "status": execution["status"],
         "algorithm": "Flood Fill",
+    }
+
+@router.get(
+    "/sessions/history",
+    response_model=HistoryResponse,
+    tags=["sessions"],
+)
+
+def get_history(
+    labirinto_id: int | None = Query(default=None, description="Filtra por labirinto"),
+    status: Literal["em_execucao", "concluido", "interrompido"] | None = Query(
+        default=None, description="Filtra por status"
+    ),
+    resultado: Literal["sucesso", "falha"] | None = Query(
+        default=None, description="Filtra por resultado"
+    ),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """
+    Lista o histórico de execuções, os recentes primeiro.
+
+    Sem filtros, devolve todas as execuções (paginadas).
+    Com `labirinto_id`, devolve só as do labirinto especificado.
+    """
+
+    # Monta cláusula WHERE, conforme o filtro recebido.
+    conditions = []
+    params: dict = {}
+
+    if labirinto_id is not None:
+        conditions.append("e.labirinto_id = :labirinto_id")
+        params["labirinto_id"] = labirinto_id
+    if status is not None:
+        conditions.append("e.status = :status")
+        params["status"] = status
+    if resultado is not None:
+        conditions.append("e.resultado = :resultado")
+        params["resultado"] = resultado
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+    total = db.execute(
+        text(f"SELECT COUNT(*) FROM execucao e {where_clause}"),
+        params,
+    ).scalar_one()
+
+    params_with_pagination = {**params, "limit": limit, "offset": offset}
+    rows = db.execute(
+        text(
+            "SELECT "
+            "  e.id, "
+            "  e.labirinto_id, "
+            "  l.nome AS labirinto_nome, "
+            "  l.tipo AS labirinto_tipo, "
+            "  e.iniciada_em, "
+            "  e.finalizada_em, "
+            "  e.tempo_total_ms, "
+            "  e.status, "
+            "  e.resultado, "
+            "  e.velocidade_media_cm_s, "
+            "  e.quantidade_celulas_visitadas "
+            "FROM execucao e "
+            "JOIN labirinto l ON l.id = e.labirinto_id "
+            f"{where_clause} "
+            "ORDER BY e.iniciada_em DESC, e.id DESC "
+            "LIMIT :limit OFFSET :offset"
+        ),
+        params_with_pagination,
+    ).mappings().all()
+
+    items = [
+        {
+            **dict(row),
+            "id": str(row["id"]),
+            "labirinto_id": str(row["labirinto_id"]),
+        }
+        for row in rows
+    ]
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "items": items,
     }
 
 

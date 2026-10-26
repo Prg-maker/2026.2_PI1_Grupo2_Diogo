@@ -22,7 +22,6 @@ def test_health_reports_database_connected():
     r = client.get("/health")
     assert r.json() == {"status": "ok", "database": "connected"}, r.json()
 
-
 def test_seed_in_database_matches_mock():
     with engine.connect() as conn:
         execucao = conn.execute(text(
@@ -34,13 +33,12 @@ def test_seed_in_database_matches_mock():
         execucao_id, celulas_visitadas = execucao
 
         posicoes = conn.execute(text(
-            "SELECT pos_x, pos_y FROM amostra_telemetria "
+            "SELECT pos_x, pos_y FROM amostra_movimento "
             "WHERE execucao_id = :id ORDER BY tempo_relativo_ms"
         ), {"id": execucao_id}).all()
         paredes = conn.execute(text(
             "SELECT celula_x, celula_y, lado FROM parede_detectada WHERE execucao_id = :id"
         ), {"id": execucao_id}).all()
-
     trajetoria = build_seed_path()
     assert [tuple(p) for p in posicoes] == [(p.col, p.row) for p in trajetoria]
     assert celulas_visitadas == len({(p.row, p.col) for p in trajetoria})

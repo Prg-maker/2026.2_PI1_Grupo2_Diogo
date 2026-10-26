@@ -76,6 +76,15 @@ O banco recusa qualquer valor fora destas listas:
    | `POSTGRES_DB` | Nome do banco (ex.: `micromouse`) |
    | `POSTGRES_PORT` | Porta do **seu computador** onde o banco vai ficar acessível (normalmente `5432`) |
 
+## Driver do PostgreSQL
+
+O backend usa **psycopg2** (`psycopg2-binary`), não psycopg v3. Motivo:
+o psycopg v3 tem um bug conhecido de fechamento lento de socket no
+Windows + Docker Desktop (~130s por conexão), que trava os testes e
+o shutdown do servidor. O psycopg2 não tem esse problema.
+
+A URL de conexão em `app/core/config.py` deve começar com:
+    postgresql+psycopg2://
 
 ## Subindo o banco
 

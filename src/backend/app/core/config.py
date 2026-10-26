@@ -28,7 +28,7 @@ class Settings(BaseSettings):
         password = quote_plus(self.POSTGRES_PASSWORD)
 
         return (
-            f"postgresql+psycopg://{user}:{password}"
+            f"postgresql+psycopg2://{user}:{password}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
     @property
