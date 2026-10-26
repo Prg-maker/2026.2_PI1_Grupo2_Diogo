@@ -155,10 +155,26 @@ telemetria, além dos testes do seed:
   tests/test_telemetry_routes.py \
   tests/test_telemetry_service.py \
   test/test_history.py \
-  tests/test_seed.py
+  tests/test_seed.py \
+  tests/test_integrity.py \
+  tests/test_database.py \
 
 ./venv/bin/python -m pytest -q tests/test_execution_data.py -k session_telemetry
 ```
+
+## Testes que precisam do banco no ar
+
+Três arquivos precisam do PostgreSQL rodando (`docker compose up -d backend`):
+
+- `test_history.py` — testa a rota de histórico contra o banco real.
+- `test_integrity.py` — testa constraints, transações e FKs.
+- `test_database.py` — testa o link com o banco e o seed.
+
+Se o banco não estiver disponível, eles são **pulados** (não falham) com a mensagem:
+
+    banco fora do ar na porta 5432: rode docker compose up -d backend
+
+Isso é intencional: a suíte principal (`test_seed`, `test_routes`, `test_execution_data`) roda sem banco; só os testes de persistência precisam dele.
 
 Os testes das rotas de telemetria usam um banco simulado para validar a resposta
 sem alterar dados reais. Os testes cobrem leitura da última amostra, execução
