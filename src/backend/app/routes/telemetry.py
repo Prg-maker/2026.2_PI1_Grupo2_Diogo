@@ -1,4 +1,7 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -15,6 +18,7 @@ router = APIRouter(
 )
 websocket_router = APIRouter(tags=["Telemetry"])
 telemetry_input_adapter = TypeAdapter(TelemetryData | EspTelemetryInput)
+CURRENT_TELEMETRY_INTERVAL_SECONDS = 1
 
 
 @router.get("/status")
@@ -27,6 +31,10 @@ def get_esp_connection_status():
 )
 def get_current_telemetry(db: Session = Depends(get_db)):
     """Busca no banco a última amostra recebida, priorizando execução ativa."""
+    return _get_current_telemetry(db)
+
+
+def _get_current_telemetry(db: Session):
     sample = db.execute(
         text(
             "SELECT t.id AS telemetry_sample_id, t.execucao_id, "
@@ -62,7 +70,9 @@ def get_current_telemetry(db: Session = Depends(get_db)):
         "position": {"row": sample["pos_y"], "col": sample["pos_x"]},
         "metrics": {
             "speed_cm_s": sample["velocidade_instantanea_cm_s"],
-            "rpm": sample["rpm_motor_esq"],
+            "rpm": (sample["rpm_motor_esq"] + sample["rpm_motor_dir"]) / 2,
+            "rpmLeft": sample["rpm_motor_esq"],
+            "rpmRight": sample["rpm_motor_dir"],
             "battery_pct": sample["nivel_bateria_pct"],
         },
         "movement": {
@@ -113,20 +123,30 @@ def _save_telemetry(telemetry: EspTelemetryInput | TelemetryData, db: Session):
     if isinstance(telemetry, TelemetryData):
         battery = telemetry.metrics.battery_pct
         speed = telemetry.metrics.speed_cm_s
-        rpm = int(telemetry.metrics.rpm)
+        rpm_left = int(
+            telemetry.metrics.rpm_left
+            if telemetry.metrics.rpm_left is not None
+            else telemetry.metrics.rpm
+        )
+        rpm_right = int(
+            telemetry.metrics.rpm_right
+            if telemetry.metrics.rpm_right is not None
+            else telemetry.metrics.rpm
+        )
         pos_x = telemetry.position.col
         pos_y = telemetry.position.row
     else:
         battery = telemetry.battery_pct
         speed = telemetry.speed_cm_s
-        rpm = telemetry.rpm
+        rpm_left = telemetry.rpm
+        rpm_right = telemetry.rpm
         pos_x = 0
         pos_y = 0
 
     last_telemetry = db.execute(
         text(
             "SELECT tempo_relativo_ms, nivel_bateria_pct, "
-            "velocidade_instantanea_cm_s, rpm_motor_esq "
+            "velocidade_instantanea_cm_s, rpm_motor_esq, rpm_motor_dir "
             "FROM amostra_telemetria WHERE execucao_id = :execucao_id "
             "ORDER BY id DESC LIMIT 1"
         ),
@@ -144,7 +164,8 @@ def _save_telemetry(telemetry: EspTelemetryInput | TelemetryData, db: Session):
         unchanged = (
             round(last_telemetry["nivel_bateria_pct"], 1) == round(battery, 1)
             and round(last_telemetry["velocidade_instantanea_cm_s"], 2) == round(speed, 2)
-            and last_telemetry["rpm_motor_esq"] == rpm
+            and last_telemetry["rpm_motor_esq"] == rpm_left
+            and last_telemetry["rpm_motor_dir"] == rpm_right
             and last_movement["pos_x"] == pos_x
             and last_movement["pos_y"] == pos_y
         )
@@ -171,7 +192,7 @@ def _save_telemetry(telemetry: EspTelemetryInput | TelemetryData, db: Session):
             "consumo_eletrico_ma, velocidade_instantanea_cm_s, rpm_motor_esq, rpm_motor_dir"
             ") VALUES ("
             ":execucao_id, :tempo_relativo_ms, :bateria, "
-            "0, :velocidade, :rpm, :rpm"
+            "0, :velocidade, :rpm_left, :rpm_right"
             ") RETURNING id"
         ),
         {
@@ -179,7 +200,8 @@ def _save_telemetry(telemetry: EspTelemetryInput | TelemetryData, db: Session):
             "tempo_relativo_ms": elapsed_ms,
             "bateria": battery,
             "velocidade": speed,
-            "rpm": rpm,
+            "rpm_left": rpm_left,
+            "rpm_right": rpm_right,
         },
     ).scalar_one()
     movement_id = db.execute(
@@ -243,3 +265,22 @@ async def receive_telemetry_websocket(websocket: WebSocket):
         pass
     finally:
         telemetry_service.mark_websocket_disconnected()
+
+
+@websocket_router.websocket("/ws/telemetry/current")
+async def stream_current_telemetry_websocket(websocket: WebSocket):
+    """Envia a amostra atual ao cliente a cada segundo até a desconexão."""
+    await websocket.accept()
+    try:
+        while True:
+            db = SessionLocal()
+            try:
+                current = _get_current_telemetry(db)
+            except HTTPException as error:
+                current = {"status": "error", "detail": error.detail, "code": error.status_code}
+            finally:
+                db.close()
+            await websocket.send_json(jsonable_encoder(current))
+            await asyncio.sleep(CURRENT_TELEMETRY_INTERVAL_SECONDS)
+    except WebSocketDisconnect:
+        pass

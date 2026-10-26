@@ -35,15 +35,13 @@ class TelemetryService:
         age_ms = None if last_seen is None else max(
             0.0, (now - last_seen).total_seconds() * 1000
         )
-        websocket_connected = self.is_websocket_connected()
         packet_recently_received = (
             last_seen is not None
             and self._esp_reports_connected
             and age_ms <= settings.ESP_CONNECTION_TIMEOUT_MS
         )
-        connected = websocket_connected or packet_recently_received
         return {
-            "connected": connected,
+            "connected": packet_recently_received,
             "last_seen": last_seen,
             "age_ms": None if age_ms is None else round(age_ms, 2),
         }
