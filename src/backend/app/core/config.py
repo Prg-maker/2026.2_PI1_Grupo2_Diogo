@@ -20,6 +20,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
+    cors_origins: str = "http://localhost:5173"
+
     @property
     def database_url(self) -> str:
         user = quote_plus(self.POSTGRES_USER)
@@ -29,6 +31,9 @@ class Settings(BaseSettings):
             f"postgresql+psycopg2://{user}:{password}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
 settings = Settings()

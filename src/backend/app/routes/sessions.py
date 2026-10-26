@@ -33,9 +33,15 @@ def get_active_session(db: Session = Depends(get_db)):
     if execution is None:
         return None
     return {
-        **dict(execution),
-        "id": str(execution["id"]),
         "labirinto_id": str(execution["labirinto_id"]),
+        "id": str(execution["id"]),
+        "iniciada_em": execution["iniciada_em"],
+        "finalizada_em": execution["finalizada_em"],
+        "tempo_total_ms": execution["tempo_total_ms"],
+        "status": execution["status"],
+        "resultado": execution["resultado"],
+        "velocidade_media_cm_s": execution["velocidade_media_cm_s"],
+        "criado_em": execution["criado_em"],
         "algorithm": execution["algoritmo"],
     }
 

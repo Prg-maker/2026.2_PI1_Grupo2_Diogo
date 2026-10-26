@@ -1,20 +1,50 @@
 import LogoIconSVG from "../../assets/Logo.svg";
 import BurguerSVG from "../../assets/burguer.svg";
 import { NavLinkBar } from "./NavLinkBar";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RxDashboard } from "react-icons/rx";
 import { GiMaze } from "react-icons/gi";
 import { GoClock } from "react-icons/go";
 import { LuBookText } from "react-icons/lu";
+type StatusConexao =  true | false
 
 export function Sidebar() {
-  const status = true;
   const [IsOpen, setIsOpen] = useState(false);
+  const [status, setStatus] = useState<StatusConexao>(false)
+
+   useEffect(() => {
+    let ws: WebSocket | undefined
+    let disposed = false
+
+    const timer = window.setTimeout(() => {
+      if (disposed) return
+      ws = new WebSocket('ws://localhost:8000/ws/telemetry/current')
+
+      ws.onmessage = (event) => {
+        try {
+          const dados = JSON.parse(event.data)
+          setStatus(Boolean(dados.connected))
+        } catch {
+          setStatus(false)
+        }
+      }
+
+      ws.onclose = () => setStatus(false)
+      ws.onerror = () => ws?.close()
+    }, 0)
+
+    return () => {
+      disposed = true
+      window.clearTimeout(timer)
+      ws?.close()
+    }
+  }, [])
+
   function handleClick() {
     console.log(IsOpen);
     setIsOpen(!IsOpen);
   }
-
+  
   return (
     <nav className="flex flex-col w-full h-30 sm:h-full sm:w-75  bg-[#08111F] border-r-[0.5px] border-[#FFFFFF1A]  sm:pt-9 pt-8 justify-between sm:static fixed z-10">
       <div className="flex sm:flex-col items-center sm:justify-start justify-center gap-10  border-b-[0.5px]  border-[#FFFFFF1A] pb-10">

@@ -9,6 +9,20 @@ class TelemetryService:
         self._last_telemetry: TelemetryData | None = None
         self._last_esp_received_at: datetime | None = None
         self._esp_reports_connected = False
+        self._websocket_connections = 0
+
+    def mark_websocket_connected(self) -> None:
+        """Registra uma conexão WebSocket ativa da ESP."""
+        self._websocket_connections += 1
+
+    def mark_websocket_disconnected(self) -> None:
+        """Remove uma conexão WebSocket encerrada da ESP."""
+        self._websocket_connections = max(0, self._websocket_connections - 1)
+        if self._websocket_connections == 0:
+            self._esp_reports_connected = False
+
+    def is_websocket_connected(self) -> bool:
+        return self._websocket_connections > 0
 
     def mark_esp_packet_received(self, connected: bool = True) -> None:
         """Registra o recebimento de um pacote da ESP, mesmo sem gravar amostra."""
@@ -21,13 +35,13 @@ class TelemetryService:
         age_ms = None if last_seen is None else max(
             0.0, (now - last_seen).total_seconds() * 1000
         )
-        connected = (
+        packet_recently_received = (
             last_seen is not None
             and self._esp_reports_connected
             and age_ms <= settings.ESP_CONNECTION_TIMEOUT_MS
         )
         return {
-            "connected": connected,
+            "connected": packet_recently_received,
             "last_seen": last_seen,
             "age_ms": None if age_ms is None else round(age_ms, 2),
         }

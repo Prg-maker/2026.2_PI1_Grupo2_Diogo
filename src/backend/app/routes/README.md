@@ -16,7 +16,7 @@ navegador ──► frontend (:5173) ──proxy /api──► backend (:8000)
 ```
 
 1. O front chama `POST /api/sessions` ao iniciar e recebe o id da execução criada.
-2. A ESP envia as métricas e a posição por `POST /api/telemetry`.
+2. A ESP envia as métricas e a posição por `POST /api/telemetry` ou pela conexão WebSocket `/ws/telemetry`.
 3. O backend grava as métricas em `amostra_telemetria` e posição/giroscópio em `amostra_movimento`.
 4. Ao interromper, o front chama `POST /api/sessions/{id}/finish`.
 
@@ -49,8 +49,10 @@ Os caminhos das rotas continuam com `sessions`, mas o que elas devolvem segue o 
 | `GET /api/sessions/{id}/metrics` | As métricas atuais: `speed_cm_s`, `rpm` e `battery_pct`. | 404 |
 | `GET /api/sessions/{id}/events` | O log de eventos: `timestamp`, `type` e `message`. | 404 |
 | `POST /api/telemetry` | Salva quando os valores mudam ou a cada 5 s; a resposta informa `saved` ou `unchanged` e inclui `execucao_id`. | `409` se não houver execução ativa. |
-| `GET /api/telemetry/status` | Informa se a ESP enviou um pacote recentemente, com `connected`, `last_seen` e `age_ms`. O status expira após `ESP_CONNECTION_TIMEOUT_MS` (5 s por padrão). | — |
-| `GET /api/telemetry/current` | Busca no banco a última amostra salva, priorizando uma execução ativa; devolve métricas, posição, horário relativo e estado recente da conexão. | `503` se ainda não houver amostras salvas. |
+| `WS /ws/telemetry` | Recebe as mesmas amostras JSON da rota HTTP e responde a cada mensagem com o resultado do salvamento. |
+| `GET /api/telemetry/status` | Informa se um pacote recente da ESP foi recebido; devolve `connected`, `last_seen` e `age_ms`. A conexão WebSocket aberta sem envio de pacotes não conta como placa conectada. Pacotes expiram após `ESP_CONNECTION_TIMEOUT_MS` (5 s por padrão). | — |
+| `GET /api/telemetry/current` | Busca no banco a última amostra salva, priorizando execução ativa; devolve métricas, posição, horário relativo e estado da conexão WebSocket ou do recebimento HTTP recente. | `503` se ainda não houver amostras salvas. |
+| `WS /ws/telemetry/current` | Envia a amostra atual imediatamente e depois a cada segundo, até o cliente desconectar. |
 
 O campo `status` vale `em_execucao`, `concluido` ou `interrompido`, como na documentação do projeto. O tempo (`tempo_total_ms`) é em **milissegundos**.
 
@@ -149,9 +151,11 @@ A API disponibiliza a última amostra persistida da telemetria através do endpo
 GET /api/telemetry/current
 ```
 
-O front pode consultar essa rota periodicamente para atualizar os valores. A resposta inclui `execucao_id`, `telemetry_sample_id`, `metrics`, `position`, `connected` e `stale`. Se a execução estiver ativa, a rota prioriza as amostras dela; caso contrário, devolve a amostra mais recente disponível.
+O front pode consultar `GET /api/telemetry/current` ou abrir `ws://<IP_DO_BACKEND>:8000/ws/telemetry/current` para receber atualizações em tempo real (envio imediato e depois a cada segundo). Cada mensagem inclui `execucao_id`, `telemetry_sample_id`, `metrics`, `position`, `connected` e `stale`. Em `metrics`, `rpm` é a média e `rpmLeft`/`rpmRight` preservam os valores individuais. Se a execução estiver ativa, a API prioriza as amostras dela; caso contrário, devolve a amostra mais recente disponível. Se ainda não houver amostras, o WebSocket envia `{"status":"error","detail":"Nenhuma telemetria salva no banco.","code":503}`.
 
-Para persistir os dados enviados pela ESP, use `POST /api/telemetry`. Esse endpoint recebe o JSON aninhado com `position` e `metrics`, grava bateria/velocidade/RPM em `amostra_telemetria` e posição/giroscópio em `amostra_movimento`. Campos de giroscópio e consumo não enviados pela ESP são gravados como zero. Leituras sem mudança são ignoradas, com uma amostra de segurança a cada 5 segundos; alterações de bateria, velocidade, RPM ou posição são gravadas imediatamente. A interface pode consultar `GET /api/telemetry/status` para obter o estado da conexão: o backend considera a ESP conectada por 5 segundos após o último pacote recebido.
+Para persistir os dados enviados pela ESP, use `POST /api/telemetry` ou WebSocket `/ws/telemetry`. O backend considera a ESP conectada por até 5 segundos após o último pacote recebido; uma conexão aberta sem pacotes não marca a placa como conectada. A interface pode consultar `GET /api/telemetry/status` ou o campo `connected` de `GET /api/telemetry/current`.
+
+Para usar WebSocket, conecte a ESP em `ws://<IP_DO_BACKEND>:8000/ws/telemetry` e envie uma mensagem JSON por amostra. No formato aninhado, envie `metrics.rpmLeft` e `metrics.rpmRight` para preservar os valores individuais em `rpm_motor_esq` e `rpm_motor_dir`. `metrics.rpm` é opcional quando os dois valores individuais são enviados; se omitido, o backend calcula a média. Sem os campos individuais, `rpm` preenche os dois lados. Também é aceito o formato plano da ESP (`bateria`, `velocidade`, `rpm_motor`, opcionalmente `connected`). Cada pacote recebe uma resposta JSON com `saved` ou `unchanged`; a conexão aberta sozinha não marca a ESP online: é preciso enviar pacotes regularmente.
 
 ### Intervalo de atualização
 
