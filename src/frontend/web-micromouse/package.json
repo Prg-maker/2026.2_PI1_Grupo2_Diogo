@@ -11,7 +11,9 @@
     "test:unit": "vitest run",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "node scripts/run-cypress.mjs run --e2e --browser chrome",
+    "test:e2e:open": "node scripts/run-cypress.mjs open --e2e --browser chrome"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -34,6 +36,7 @@
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/coverage-v8": "^4.1.12",
+    "cypress": "^16.2.0",
     "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.6",
